@@ -1,2 +1,2 @@
-(lang dune 3.21.1)
+(lang dune 3.21)
 (name ouroboros)
