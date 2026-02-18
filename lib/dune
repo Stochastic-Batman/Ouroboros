@@ -1,0 +1,4 @@
+(library
+ (name ouroboros)
+ (wrapped false)
+ (libraries owl owl-base))

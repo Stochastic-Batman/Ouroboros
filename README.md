@@ -82,7 +82,11 @@ opam install -y dune owl owl-base
 Run the project using Dune:
 
 ```bash
-dune build
-# Run the training executable
-dune exec bin/main.exe
+dune build && dune exec bin/main.exe
+```
+
+Run `test/test_ouroboros.ml`:
+
+```bash
+dune test
 ```
