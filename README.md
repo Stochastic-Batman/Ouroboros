@@ -31,6 +31,8 @@ ouroboros/
 │   ├── model.ml           # The RNN architecture and forward/backward passes
 │   └── train.ml           # Training logic and Owl optimization loops
 ├── ouroboros.opam         # Package dependencies
+├── ouroboros.pdf          # Document explaining math behind this project
+├── ouroboros.tex          # LaTeX source for the document above
 └── test
     ├── dune
     └── test_ouroboros.ml
