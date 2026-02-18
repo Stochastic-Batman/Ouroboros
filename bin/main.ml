@@ -4,10 +4,11 @@
 
 let () =
   Train.train
-    ~seed:0xDEADBEEFL   (* LFSR initial state — change to get a different stream *)
-    ~hidden_size:32      (* RNN memory capacity                                   *)
-    ~seq_len:64          (* BPTT unroll length                                    *)
-    ~n_steps:2000        (* total gradient updates                                *)
-    ~lr:0.005            (* SGD learning rate                                     *)
-    ~clip_val:5.0        (* gradient clipping threshold                           *)
+    ~seed:0x95L
+    ~hidden_size:64
+    ~seq_len:128
+    ~n_steps:5000
+    ~lr:0.005
+    ~momentum:0.9
+    ~clip_val:5.0
     ()

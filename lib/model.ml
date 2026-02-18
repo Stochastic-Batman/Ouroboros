@@ -127,8 +127,8 @@ let backward (model : t) (cache  : M.mat * M.mat * float) (dh_next : M.mat) (dy 
      we absorb the sigmoid derivative into the BCE gradient (the two cancel). *)
   let dy_raw = M.of_array [| dy |] 1 1 in
 
-  (* d_why:  outer product  dy_raw · h_next^T *)
-  let d_why = M.dot (M.transpose dy_raw) (M.transpose h_next) in
+  (* d_why:  outer product  dy_raw · h_next^T, shape [1 x hidden_size] *)
+  let d_why = M.dot dy_raw (M.transpose h_next) in
   let d_by  = dy_raw in
 
   (* Gradient w.r.t. h_next from the output layer. *)
@@ -152,7 +152,7 @@ let backward (model : t) (cache  : M.mat * M.mat * float) (dh_next : M.mat) (dy 
   ( { d_wxh; d_whh; d_bh; d_why; d_by }, dh_prev )
 
 
-(* Parameter update (SGD with gradient clipping)                               *)
+(* Parameter update (SGD with momentum and gradient clipping)                  *)
 
 (* [clip_grads g clip_val] clips every gradient matrix so that no element
    exceeds [clip_val] in absolute value.  Clipping prevents exploding gradients
@@ -166,15 +166,53 @@ let clip_grads (g : grads) (clip_val : float) : grads =
     d_by  = clip g.d_by; }
 
 
-(* [update model grads lr] applies a vanilla SGD step: θ ← θ - lr * ∂L/∂θ. *)
-let update (model : t) (g : grads) (lr : float) : t =
-  let step param grad = M.sub param (M.scalar_mul lr grad) in
-  { model with
-    wxh = step model.wxh g.d_wxh;
-    whh = step model.whh g.d_whh;
-    bh  = step model.bh  g.d_bh;
-    why = step model.why g.d_why;
-    by  = step model.by  g.d_by; }
+(* Velocity record — one matrix per parameter, mirroring [t].
+   Momentum accumulates a running average of past gradients so the optimiser
+   can build up speed in consistent directions and dampen oscillations. *)
+type velocity = {
+  v_wxh : M.mat;
+  v_whh : M.mat;
+  v_bh  : M.mat;
+  v_why : M.mat;
+  v_by  : M.mat;
+}
+
+
+(* [zero_velocity model] initialises all velocity matrices to zero — called
+   once before training begins. *)
+let zero_velocity (model : t) : velocity =
+  { v_wxh = M.zeros (M.row_num model.wxh) (M.col_num model.wxh);
+    v_whh = M.zeros (M.row_num model.whh) (M.col_num model.whh);
+    v_bh  = M.zeros (M.row_num model.bh)  (M.col_num model.bh);
+    v_why = M.zeros (M.row_num model.why) (M.col_num model.why);
+    v_by  = M.zeros (M.row_num model.by)  (M.col_num model.by); }
+
+
+(* [update model grads vel lr momentum] applies one SGD + momentum step:
+     v  <-  momentum * v + grad
+     parameters  <-  parameters - lr * v
+   The velocity [v] acts as a low-pass filter on the gradient signal: noise
+   averages out across steps while consistent gradient directions accumulate,
+   letting the optimiser punch through the flat loss regions that stall
+   vanilla SGD on long-range sequence tasks like LFSR prediction.
+   Returns the updated model and the new velocity for the next step. *)
+let update (model : t) (g : grads) (vel : velocity) (lr : float) (momentum : float)
+    : t * velocity =
+  (* Update each velocity: v <- momentum * v + grad *)
+  let v_wxh = M.add (M.scalar_mul momentum vel.v_wxh) g.d_wxh in
+  let v_whh = M.add (M.scalar_mul momentum vel.v_whh) g.d_whh in
+  let v_bh  = M.add (M.scalar_mul momentum vel.v_bh)  g.d_bh  in
+  let v_why = M.add (M.scalar_mul momentum vel.v_why) g.d_why in
+  let v_by  = M.add (M.scalar_mul momentum vel.v_by)  g.d_by  in
+  let new_vel = { v_wxh; v_whh; v_bh; v_why; v_by } in
+  (* Apply the velocity as the effective update: θ <- θ - lr * v *)
+  let new_model = { model with
+    wxh = M.sub model.wxh (M.scalar_mul lr v_wxh);
+    whh = M.sub model.whh (M.scalar_mul lr v_whh);
+    bh  = M.sub model.bh  (M.scalar_mul lr v_bh);
+    why = M.sub model.why (M.scalar_mul lr v_why);
+    by  = M.sub model.by  (M.scalar_mul lr v_by); } in
+  (new_model, new_vel)
 
 
 (* [zero_hidden model] returns a zeroed initial hidden state — used at the

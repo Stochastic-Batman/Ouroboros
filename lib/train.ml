@@ -101,8 +101,8 @@ let accuracy (preds : float list) (targets : float list) : float =
 
 (* Main training loop                                                           *)
 
-(* [train ~seed ~hidden_size ~seq_len ~n_steps ~lr ~clip_val] trains an RNN
-   to predict LFSR output bits.
+(* [train ~seed ~hidden_size ~seq_len ~n_steps ~lr ~momentum ~clip_val] trains
+   an RNN to predict LFSR output bits.
 
    Parameters:
      seed        - the initial LFSR state (determines the bitstream)
@@ -110,46 +110,51 @@ let accuracy (preds : float list) (targets : float list) : float =
      seq_len     - how many bits to unroll per gradient step (BPTT window)
      n_steps     - total number of gradient steps to take
      lr          - SGD learning rate
+     momentum    - SGD momentum coefficient (0 = vanilla SGD, 0.9 = typical)
      clip_val    - gradient clipping threshold                               *)
-let train ?(seed = 0xDEADBEEFL) ?(hidden_size = 32) ?(seq_len = 64) ?(n_steps = 2000) ?(lr = 0.01) ?(clip_val    = 5.0) () =
+let train ?(seed = 0xDEADBEEFL) ?(hidden_size = 32) ?(seq_len = 64) ?(n_steps = 2000) ?(lr = 0.01) ?(momentum = 0.9) ?(clip_val = 5.0) () =
 
   Printf.printf "Ouroboros — Neural Cryptanalysis of a 32-bit LFSR\n";
-  Printf.printf "hidden=%d  seq_len=%d  lr=%.4f  steps=%d\n\n%!"
-    hidden_size seq_len lr n_steps;
+  Printf.printf "hidden=%d  seq_len=%d  lr=%.4f  momentum=%.2f  steps=%d\n\n%!"
+    hidden_size seq_len lr momentum n_steps;
 
   (* Generate a long bitstream upfront — we'll slice windows from it. *)
   let total_bits = n_steps * seq_len + seq_len in
-  let bits = LFSR.generate_sequence seed total_bits in
+  let bits = Array.of_list (LFSR.generate_sequence seed total_bits) in
 
   let model = Model.create hidden_size in
 
   (* We carry the hidden state across consecutive chunks so the RNN can
      learn long-range structure beyond a single BPTT window. *)
-  let h0 = Model.zero_hidden model in
+  let h0  = Model.zero_hidden model in
 
-  (* Fold over each gradient step, threading (model, hidden_state) through. *)
-  let _final_model =
+  (* Velocity starts at zero — it will warm up over the first few steps as
+     the momentum term accumulates gradient history. *)
+  let vel = Model.zero_velocity model in
+
+  (* Fold over each gradient step, threading (model, hidden_state, velocity)
+     through so all three evolve together without mutable state. *)
+  let _final =
     List.fold_left
-      (fun (mdl, h) step ->
+      (fun (mdl, h, vel) step ->
         (* Slice [step*seq_len .. step*seq_len + seq_len] from the stream. *)
-        let offset = step * seq_len in
-        let window = List.filteri (fun i _ -> i >= offset && i < offset + seq_len) bits in
+        let offset      = step * seq_len in
+        let window      = Array.sub bits offset seq_len |> Array.to_list in
         (* Targets are the bits one position ahead of the inputs. *)
-        let next_window =
-          List.filteri (fun i _ -> i >= offset + 1 && i < offset + seq_len + 1) bits in
+        let next_window = Array.sub bits (offset + 1) seq_len |> Array.to_list in
 
         (* Convert int bits to floats for the network. *)
         let inputs  = List.map float_of_int window in
         let targets = List.map float_of_int next_window in
 
         if List.length inputs < seq_len || List.length targets < seq_len then
-          (mdl, h)  (* ran off the end of the pre-generated stream *)
+          (mdl, h, vel)  (* ran off the end of the pre-generated stream *)
         else begin
           let (loss, caches, preds, h_last) =
             forward_sequence mdl h inputs targets in
 
-          let grads = backward_sequence mdl caches preds targets clip_val in
-          let mdl'  = Model.update mdl grads lr in
+          let grads        = backward_sequence mdl caches preds targets clip_val in
+          let (mdl', vel') = Model.update mdl grads vel lr momentum in
 
           (* Print progress every 100 steps. *)
           if (step + 1) mod 100 = 0 then begin
@@ -158,9 +163,11 @@ let train ?(seed = 0xDEADBEEFL) ?(hidden_size = 32) ?(seq_len = 64) ?(n_steps = 
               (step + 1) n_steps loss (acc *. 100.0)
           end;
 
-          (mdl', h_last)
+          (* Detach hidden state - clamp it so it can't drift outside tanh range *)
+          let h_last_detached = M.map (fun v -> Float.max (-1.0) (Float.min 1.0 v)) h_last in
+          (mdl', h_last_detached, vel')
         end)
-      (model, h0)
+      (model, h0, vel)
       (List.init n_steps (fun i -> i))
   in
   Printf.printf "\nDone.\n"
