@@ -8,23 +8,16 @@ open Owl
 module M = Dense.Matrix.S
 
 
-(* -------------------------------------------------------------------------- *)
 (* Sequence-level forward pass                                                  *)
-(* -------------------------------------------------------------------------- *)
 
 (* [forward_sequence model h0 inputs targets] runs the RNN over a list of
    input bits, predicting the next bit at each step.
    Returns:
-     total_loss — summed BCE over the sequence
-     caches     — list of per-step caches (in forward order) for BPTT
-     preds      — list of per-step predictions (for accuracy reporting)
-     h_last     — hidden state at the end, so state can carry across chunks *)
-let forward_sequence (model : Model.t)
-                     (h0    : M.mat)
-                     (inputs  : float list)
-                     (targets : float list)
-    : float * (M.mat * M.mat * float) list * float list * M.mat =
-
+     total_loss - summed BCE over the sequence
+     caches     - list of per-step caches (in forward order) for BPTT
+     preds      - list of per-step predictions (for accuracy reporting)
+     h_last     - hidden state at the end, so state can carry across chunks *)
+let forward_sequence (model : Model.t) (h0 : M.mat) (inputs  : float list) (targets : float list) : float * (M.mat * M.mat * float) list * float list * M.mat =
   (* Zip inputs and targets so we can iterate step by step. *)
   let pairs = List.combine inputs targets in
 
@@ -45,9 +38,7 @@ let forward_sequence (model : Model.t)
   (loss /. float_of_int (List.length inputs), caches, List.rev preds, h_last)
 
 
-(* -------------------------------------------------------------------------- *)
 (* Sequence-level backward pass (BPTT)                                          *)
-(* -------------------------------------------------------------------------- *)
 
 (* [add_grads a b] element-wise sums two gradient records — used to accumulate
    gradients across all time steps before applying a single update. *)
@@ -72,12 +63,7 @@ let zero_grads (model : Model.t) : Model.grads =
 (* [backward_sequence model caches preds targets clip_val] runs BPTT over
    all steps.  Caches are already in reverse order (newest first), so we walk
    backwards naturally.  Returns the accumulated, clipped gradient record. *)
-let backward_sequence (model    : Model.t)
-                      (caches   : (M.mat * M.mat * float) list)
-                      (preds    : float list)
-                      (targets  : float list)
-                      (clip_val : float)
-    : Model.grads =
+let backward_sequence (model    : Model.t) (caches   : (M.mat * M.mat * float) list) (preds    : float list) (targets  : float list) (clip_val : float) : Model.grads =
 
   (* Reverse preds/targets to match the newest-first order of caches. *)
   let preds_rev   = List.rev preds   in
@@ -97,9 +83,7 @@ let backward_sequence (model    : Model.t)
   Model.clip_grads acc_grads clip_val
 
 
-(* -------------------------------------------------------------------------- *)
 (* Accuracy helper                                                              *)
-(* -------------------------------------------------------------------------- *)
 
 (* [accuracy preds targets] returns the fraction of predictions that round to
    the correct bit.  A prediction >= 0.5 is interpreted as "1". *)
@@ -115,28 +99,19 @@ let accuracy (preds : float list) (targets : float list) : float =
   float_of_int correct /. float_of_int n
 
 
-(* -------------------------------------------------------------------------- *)
 (* Main training loop                                                           *)
-(* -------------------------------------------------------------------------- *)
 
 (* [train ~seed ~hidden_size ~seq_len ~n_steps ~lr ~clip_val] trains an RNN
    to predict LFSR output bits.
 
    Parameters:
-     seed        — the initial LFSR state (determines the bitstream)
-     hidden_size — number of hidden units in the RNN
-     seq_len     — how many bits to unroll per gradient step (BPTT window)
-     n_steps     — total number of gradient steps to take
-     lr          — SGD learning rate
-     clip_val    — gradient clipping threshold                               *)
-let train
-    ?(seed        = 0xDEADBEEFL)
-    ?(hidden_size = 32)
-    ?(seq_len     = 64)
-    ?(n_steps     = 2000)
-    ?(lr          = 0.01)
-    ?(clip_val    = 5.0)
-    () =
+     seed        - the initial LFSR state (determines the bitstream)
+     hidden_size - number of hidden units in the RNN
+     seq_len     - how many bits to unroll per gradient step (BPTT window)
+     n_steps     - total number of gradient steps to take
+     lr          - SGD learning rate
+     clip_val    - gradient clipping threshold                               *)
+let train ?(seed = 0xDEADBEEFL) ?(hidden_size = 32) ?(seq_len = 64) ?(n_steps = 2000) ?(lr = 0.01) ?(clip_val    = 5.0) () =
 
   Printf.printf "Ouroboros — Neural Cryptanalysis of a 32-bit LFSR\n";
   Printf.printf "hidden=%d  seq_len=%d  lr=%.4f  steps=%d\n\n%!"

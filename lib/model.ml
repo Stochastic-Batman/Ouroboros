@@ -16,25 +16,21 @@ open Owl
 module M = Dense.Matrix.S
 
 
-(* -------------------------------------------------------------------------- *)
 (* Model record                                                                 *)
-(* -------------------------------------------------------------------------- *)
 
 (* [t] bundles every learnable parameter together so we can pass the whole
    model around as a single value. *)
 type t = {
-  wxh : M.mat;   (* input  → hidden weights,  shape [hidden_size × 1]          *)
-  whh : M.mat;   (* hidden → hidden weights,  shape [hidden_size × hidden_size] *)
-  bh  : M.mat;   (* hidden bias,              shape [hidden_size × 1]           *)
-  why : M.mat;   (* hidden → output weights,  shape [1 × hidden_size]           *)
-  by  : M.mat;   (* output bias,              shape [1 × 1]                     *)
+  wxh : M.mat;   (* input  -> hidden weights,  shape [hidden_size x 1]          *)
+  whh : M.mat;   (* hidden -> hidden weights,  shape [hidden_size x hidden_size] *)
+  bh  : M.mat;   (* hidden bias,              shape [hidden_size x 1]           *)
+  why : M.mat;   (* hidden -> output weights,  shape [1 x hidden_size]           *)
+  by  : M.mat;   (* output bias,              shape [1 x 1]                     *)
   hidden_size : int;
 }
 
 
-(* -------------------------------------------------------------------------- *)
 (* Initialisation                                                               *)
-(* -------------------------------------------------------------------------- *)
 
 (* [create hidden_size] allocates a fresh model with Xavier-style random weights.
    Xavier init scales weights by 1/sqrt(fan_in) to keep activations from
@@ -59,9 +55,7 @@ let create (hidden_size : int) : t =
     hidden_size; }
 
 
-(* -------------------------------------------------------------------------- *)
 (* Activation functions                                                         *)
-(* -------------------------------------------------------------------------- *)
 
 (* [sigmoid x] squashes any real value into (0, 1) — used for the output
    because we want a probability. *)
@@ -76,18 +70,14 @@ let sigmoid_mat m = M.map sigmoid m
 let tanh_mat m = M.map tanh m
 
 
-(* -------------------------------------------------------------------------- *)
 (* Forward pass                                                                 *)
-(* -------------------------------------------------------------------------- *)
 
 (* [forward model h_prev x_bit] runs a single time-step of the RNN.
    Returns:
-     h_next  — the new hidden state (to be fed into the next step)
-     y       — the predicted probability that the next output bit is 1
-     cache   — intermediate values saved for the backward pass           *)
-let forward (model : t) (h_prev : M.mat) (x_bit : float)
-    : M.mat * float * (M.mat * M.mat * float) =
-
+     h_next  - the new hidden state (to be fed into the next step)
+     y       - the predicted probability that the next output bit is 1
+     cache   - intermediate values saved for the backward pass           *)
+let forward (model : t) (h_prev : M.mat) (x_bit : float) : M.mat * float * (M.mat * M.mat * float) =
   (* Wrap the scalar input as a 1×1 matrix so Owl can multiply it. *)
   let x = M.of_array [| x_bit |] 1 1 in
 
@@ -95,16 +85,14 @@ let forward (model : t) (h_prev : M.mat) (x_bit : float)
   let h_raw = M.add (M.add (M.dot model.wxh x) (M.dot model.whh h_prev)) model.bh in
   let h_next = tanh_mat h_raw in
 
-  (* y_t = sigmoid( Why·h_t + by ) — scalar probability *)
+  (* y_t = sigmoid( Why·h_t + by ) - scalar probability *)
   let y_raw = M.add (M.dot model.why h_next) model.by in
   let y     = sigmoid (M.get y_raw 0 0) in
 
   (h_next, y, (h_prev, h_next, x_bit))
 
 
-(* -------------------------------------------------------------------------- *)
 (* Loss                                                                         *)
-(* -------------------------------------------------------------------------- *)
 
 (* [bce_loss y_pred y_true] computes binary cross-entropy for a single
    prediction.  BCE = -[ y·log(p) + (1-y)·log(1-p) ]
@@ -114,9 +102,7 @@ let bce_loss (y_pred : float) (y_true : float) : float =
   -. (y_true *. log (y_pred +. eps) +. (1.0 -. y_true) *. log (1.0 -. y_pred +. eps))
 
 
-(* -------------------------------------------------------------------------- *)
 (* Backward pass (BPTT for a single step)                                       *)
-(* -------------------------------------------------------------------------- *)
 
 (* Gradients with respect to every parameter, mirroring the [t] record. *)
 type grads = {
@@ -131,16 +117,11 @@ type grads = {
 (* [backward model cache dh_next dy] computes gradients for one time-step.
    [dh_next] is the gradient flowing back from the *next* time-step (zero on
    the last step); [dy] is d_loss/d_y for this step. *)
-let backward (model : t)
-             (cache  : M.mat * M.mat * float)
-             (dh_next : M.mat)
-             (dy      : float)
-    : grads * M.mat =
-
+let backward (model : t) (cache  : M.mat * M.mat * float) (dh_next : M.mat) (dy : float) : grads * M.mat =
   let (h_prev, h_next, x_bit) = cache in
   let x = M.of_array [| x_bit |] 1 1 in
 
-  (* --- Output layer gradients --- *)
+  (* Output layer gradients *)
   (* d_loss/d_y_raw = dy * sigmoid'(y_raw).  Since sigmoid'(z) = y*(1-y) and
      we already have the sigmoid output in y, this simplifies to just dy when
      we absorb the sigmoid derivative into the BCE gradient (the two cancel). *)
@@ -156,7 +137,7 @@ let backward (model : t)
   (* Total gradient into h_next (from output + next time-step). *)
   let dh = M.add dh_from_y dh_next in
 
-  (* --- Hidden layer gradients --- *)
+  (* Hidden layer gradients *)
   (* tanh'(z) = 1 - tanh(z)^2.  h_next = tanh(h_raw), so: *)
   let dtanh = M.map (fun h -> 1.0 -. h *. h) h_next in
   let dh_raw = M.mul dh dtanh in
@@ -171,9 +152,7 @@ let backward (model : t)
   ( { d_wxh; d_whh; d_bh; d_why; d_by }, dh_prev )
 
 
-(* -------------------------------------------------------------------------- *)
 (* Parameter update (SGD with gradient clipping)                               *)
-(* -------------------------------------------------------------------------- *)
 
 (* [clip_grads g clip_val] clips every gradient matrix so that no element
    exceeds [clip_val] in absolute value.  Clipping prevents exploding gradients
