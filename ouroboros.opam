@@ -1,0 +1,10 @@
+opam-version: "2.5.0"
+name: "ouroboros"
+version: "0.1.0"
+synopsis: "RNN-based neural cryptanalysis of LFSR sequences"
+depends: [
+  "ocaml" {>= "5.4.0"}
+  "dune"  {>= "3.21.1"}
+  "owl"
+  "owl-base"
+]

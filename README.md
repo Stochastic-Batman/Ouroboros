@@ -15,25 +15,25 @@ I'm using **Owl** for the neural network operations. It provides the N-dimension
 
 ## File Structure
 
-I'm sticking to the standard OCaml/Dune project structure to keep things organized:
+I'm sticking to the standard OCaml/Dune project structure to keep things organized. Claude Sonnet 4.6 was used to plan this structure, as I am not familiar with the Ocaml/Dune project structures:
 
 ```text
 ouroboros/
-├── bin/
+├── LICENSE
+├── README.md
+├── bin
 │   ├── main.ml            # The entry point to run the trainer
 │   └── dune               # Executable config
-├── lib/
-│   ├── LFSR.ml            # LFSR sequence generation using Int64
-│   ├── model.ml           # The RNN architecture and forward/backward passes
-│   ├── train.ml           # Training logic and Owl optimization loops
-│   └── dune               # Library config
-├── test/
-│   ├── test_ouroboros.ml  # Unit tests for the math and logic
-│   └── dune
-├── README.md
 ├── dune-project           # Dune metadata
-└── ouroboros.opam         # Package dependencies
-
+├── lib
+│   ├── LFSR.ml            # LFSR sequence generation using Int64
+│   ├── dune
+│   ├── model.ml           # The RNN architecture and forward/backward passes
+│   └── train.ml           # Training logic and Owl optimization loops
+├── ouroboros.opam         # Package dependencies
+└── test
+    ├── dune
+    └── test_ouroboros.ml
 ```
 
 ## Set-Up Instructions
