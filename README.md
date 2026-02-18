@@ -7,9 +7,11 @@ The main goal is to see if an RNN can learn to predict the next bit in a "random
 
 ## The Challenge: Cracking the Bitstream
 
-An LFSR works by taking a string of bits, shifting them, and feeding a new bit into the start based on a linear combination of the current state (usually some XOR logic). Even though these sequences look like noise, they are entirely predictable if you know the "taps" or the math behind them.
+An LFSR works by taking a string of bits, shifting them, and feeding a new bit into the start based on a linear combination of the current state (usually some XOR logic). Even though these sequences look like noise, they are entirely predictable if you know the "taps" or the math behind them. The `LFSR` module generates the training data internally, so I have an infinite supply of sequences to feed the model.
 
 I'm using OCaml's **Int64** to handle the bit manipulation for the LFSR generation, ensuring I have enough space to simulate 32-bit or 64-bit registers without any overflow headaches. The RNN then takes these sequences and tries to minimize its prediction error, essentially learning the "tap" configuration of the generator through pure observation.
+
+I'm using **Owl** for the neural network operations. It provides the N-dimensional arrays and automatic differentiation.
 
 ## File Structure
 
@@ -44,7 +46,7 @@ Owl needs some heavy-duty linear algebra libraries to handle the matrix math.
 
 ```bash
 sudo apt update
-sudo apt install -y make m4 gcc pkg-config libshp-dev libgsl-dev libopenblas-dev liblapacke-dev
+sudo apt install -y bubblewrap build-essential curl m4 unzip patch pkg-config libgsl-dev libopenblas-dev liblapacke-dev
 ```
 
 ### 2. Install OPAM
@@ -62,7 +64,7 @@ I'm using a dedicated "switch" for this project to keep the OCaml 5.3 environmen
 ```bash
 opam init -y
 opam switch create ouroboros 5.4.0
-eval $(opam env)
+eval $(opam env --switch=ouroboros)
 ```
 
 ### 4. Install Project Libraries
@@ -75,13 +77,10 @@ opam install -y dune owl owl-base
 
 ### 5. Build and Run
 
-Clone the repo and run the project using Dune:
+Run the project using Dune:
 
 ```bash
 dune build
 # Run the training executable
 dune exec bin/main.exe
 ```
-
-* I'm using **Owl** for the neural network operations. It provides the N-dimensional arrays and automatic differentiation.
-* The `LFSR` module generates the training data internally, so I have an infinite supply of sequences to feed the model.
